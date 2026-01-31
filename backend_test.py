@@ -201,7 +201,7 @@ class RentMyVroomAPITester:
         # Test driving license upload for renter
         if 'renter' in self.tokens:
             license_data = {
-                "image": self.sample_image
+                "licenseUrl": "https://example.com/license.jpg"
             }
             response = self.make_request("POST", "/users/upload-license", 
                                        license_data, token=self.tokens['renter'])

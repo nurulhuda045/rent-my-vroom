@@ -104,29 +104,41 @@ class RentMyVroomAPITester:
         # Test renter registration
         response = self.make_request("POST", "/auth/register", self.renter_data)
         success = response and response.status_code in [200, 201]
-        self.log_test("Renter Registration", success, 
-                     f"Status: {response.status_code if response else 'No response'}")
+        if not success and response and response.status_code == 409:
+            # User already exists, that's okay for testing
+            success = True
+            self.log_test("Renter Registration", success, 
+                         f"Status: {response.status_code} (User already exists)")
+        else:
+            self.log_test("Renter Registration", success, 
+                         f"Status: {response.status_code if response else 'No response'}")
         
-        if success and response:
+        if success and response and response.status_code in [200, 201]:
             try:
                 renter_result = response.json()
-                if 'id' in renter_result:
-                    self.user_ids['renter'] = renter_result['id']
+                if 'user' in renter_result and 'id' in renter_result['user']:
+                    self.user_ids['renter'] = renter_result['user']['id']
             except:
                 pass
         
         # Test merchant registration
         response = self.make_request("POST", "/auth/register", self.merchant_data)
         success = response and response.status_code in [200, 201]
-        self.log_test("Merchant Registration", success, 
-                     f"Status: {response.status_code if response else 'No response'}")
+        if not success and response and response.status_code == 409:
+            # User already exists, that's okay for testing
+            success = True
+            self.log_test("Merchant Registration", success, 
+                         f"Status: {response.status_code} (User already exists)")
+        else:
+            self.log_test("Merchant Registration", success, 
+                         f"Status: {response.status_code if response else 'No response'}")
         
-        if success and response:
+        if success and response and response.status_code in [200, 201]:
             try:
                 merchant_result = response.json()
-                if 'id' in merchant_result:
-                    self.user_ids['merchant'] = merchant_result['id']
-                    self.merchant_ids.append(merchant_result['id'])
+                if 'user' in merchant_result and 'id' in merchant_result['user']:
+                    self.user_ids['merchant'] = merchant_result['user']['id']
+                    self.merchant_ids.append(merchant_result['user']['id'])
             except:
                 pass
         
@@ -143,8 +155,10 @@ class RentMyVroomAPITester:
         if success and response:
             try:
                 login_result = response.json()
-                if 'access_token' in login_result:
-                    self.tokens['renter'] = login_result['access_token']
+                if 'accessToken' in login_result:
+                    self.tokens['renter'] = login_result['accessToken']
+                if 'user' in login_result and 'id' in login_result['user']:
+                    self.user_ids['renter'] = login_result['user']['id']
             except:
                 pass
         
@@ -161,8 +175,11 @@ class RentMyVroomAPITester:
         if success and response:
             try:
                 login_result = response.json()
-                if 'access_token' in login_result:
-                    self.tokens['merchant'] = login_result['access_token']
+                if 'accessToken' in login_result:
+                    self.tokens['merchant'] = login_result['accessToken']
+                if 'user' in login_result and 'id' in login_result['user']:
+                    self.user_ids['merchant'] = login_result['user']['id']
+                    self.merchant_ids.append(login_result['user']['id'])
             except:
                 pass
         

@@ -21,9 +21,12 @@ class RentMyVroomAPITester:
         self.booking_ids = []
         self.merchant_ids = []
         
-        # Test data
+        # Test data with unique timestamps to avoid conflicts
+        import time
+        timestamp = str(int(time.time()))
+        
         self.renter_data = {
-            "email": "renter@example.com",
+            "email": f"renter{timestamp}@example.com",
             "password": "Test123!",
             "firstName": "Jane",
             "lastName": "Smith",
@@ -31,7 +34,7 @@ class RentMyVroomAPITester:
         }
         
         self.merchant_data = {
-            "email": "merchant2@example.com",
+            "email": f"merchant{timestamp}@example.com",
             "password": "Test123!",
             "firstName": "Mike",
             "lastName": "Johnson",

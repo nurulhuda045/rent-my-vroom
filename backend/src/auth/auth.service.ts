@@ -145,6 +145,11 @@ export class AuthService {
   private async generateTokens(userId: number, email: string, role: string) {
     const payload = { sub: userId, email, role };
 
+    // Clear old refresh tokens for this user to avoid unique constraint issues
+    await this.prisma.refreshToken.deleteMany({
+      where: { userId },
+    });
+
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
         secret: this.config.get("JWT_SECRET"),

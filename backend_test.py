@@ -1,354 +1,491 @@
 #!/usr/bin/env python3
 """
-Backend API Testing for Rent My Vroom Application
-Tests the backend API endpoints and documents missing functionality.
+Comprehensive Backend API Testing for Rent My Vroom NestJS Application
+Tests all authentication, user management, vehicle, booking, messaging, and review endpoints
 """
 
 import requests
 import json
-import sys
+import base64
+import time
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
 
-class RentMyVroomTester:
-    def __init__(self, base_url: str = "http://localhost:8001"):
+class RentMyVroomAPITester:
+    def __init__(self, base_url: str = "http://localhost:4000"):
         self.base_url = base_url
-        self.api_url = f"{base_url}/api"
-        self.merchant_token = None
-        self.renter_token = None
-        self.merchant_id = None
-        self.renter_id = None
-        self.vehicle_id = None
-        self.booking_id = None
-        self.test_results = []
+        self.session = requests.Session()
+        self.tokens = {}
+        self.user_ids = {}
+        self.vehicle_ids = []
+        self.booking_ids = []
+        self.merchant_ids = []
         
-    def log_test(self, test_name: str, success: bool, details: str = "", response_data: Any = None):
+        # Test data
+        self.renter_data = {
+            "email": "renter@example.com",
+            "password": "Test123!",
+            "firstName": "Jane",
+            "lastName": "Smith",
+            "role": "RENTER"
+        }
+        
+        self.merchant_data = {
+            "email": "merchant2@example.com",
+            "password": "Test123!",
+            "firstName": "Mike",
+            "lastName": "Johnson",
+            "role": "MERCHANT",
+            "businessName": "John's Rentals",
+            "businessAddress": "456 Oak St"
+        }
+        
+        # Sample base64 image for testing
+        self.sample_image = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYIDAoMDAsKCwsNDhIQDQ4RDgsLEBYQERMUFRUVDA8XGBYUGBIUFRT/2wBDAQMEBAUEBQkFBQkUDQsNFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBT/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwDX4AAAA="
+        
+    def log_test(self, test_name: str, success: bool, details: str = ""):
         """Log test results"""
         status = "✅ PASS" if success else "❌ FAIL"
-        result = {
-            "test": test_name,
-            "status": status,
-            "success": success,
-            "details": details,
-            "response_data": response_data
-        }
-        self.test_results.append(result)
-        print(f"{status}: {test_name}")
+        print(f"{status} {test_name}")
         if details:
             print(f"   Details: {details}")
-        if not success and response_data:
-            print(f"   Response: {response_data}")
-        print()
+        if not success:
+            print()
+    
+    def make_request(self, method: str, endpoint: str, data: Dict = None, 
+                    headers: Dict = None, token: str = None) -> requests.Response:
+        """Make HTTP request with optional authentication"""
+        url = f"{self.base_url}{endpoint}"
+        
+        request_headers = {"Content-Type": "application/json"}
+        if headers:
+            request_headers.update(headers)
+        if token:
+            request_headers["Authorization"] = f"Bearer {token}"
+            
+        try:
+            if method.upper() == "GET":
+                response = self.session.get(url, headers=request_headers)
+            elif method.upper() == "POST":
+                response = self.session.post(url, json=data, headers=request_headers)
+            elif method.upper() == "PATCH":
+                response = self.session.patch(url, json=data, headers=request_headers)
+            elif method.upper() == "PUT":
+                response = self.session.put(url, json=data, headers=request_headers)
+            elif method.upper() == "DELETE":
+                response = self.session.delete(url, headers=request_headers)
+            else:
+                raise ValueError(f"Unsupported HTTP method: {method}")
+                
+            return response
+        except requests.exceptions.RequestException as e:
+            print(f"Request failed: {e}")
+            return None
 
     def test_basic_connectivity(self):
         """Test basic API connectivity"""
-        try:
-            response = requests.get(f"{self.api_url}/", timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("message") == "Hello World":
-                    self.log_test("Basic API Connectivity", True, f"Status: {response.status_code}")
-                else:
-                    self.log_test("Basic API Connectivity", False, f"Unexpected response: {data}")
-            else:
-                self.log_test("Basic API Connectivity", False, f"Status: {response.status_code}")
-        except Exception as e:
-            self.log_test("Basic API Connectivity", False, f"Connection error: {str(e)}")
+        print("\n=== BASIC CONNECTIVITY TESTS ===")
+        
+        # Test Swagger UI
+        response = self.make_request("GET", "/api")
+        success = response and response.status_code == 200
+        self.log_test("Swagger UI Access", success, 
+                     f"Status: {response.status_code if response else 'No response'}")
+        
+        return success
 
-    def test_status_endpoints(self):
-        """Test the implemented status check endpoints"""
-        # Test POST /api/status
-        try:
-            payload = {"client_name": "test_client"}
-            response = requests.post(f"{self.api_url}/status", json=payload, timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                if "id" in data and "client_name" in data and "timestamp" in data:
-                    self.log_test("POST /api/status", True, f"Created status check with ID: {data['id']}")
-                else:
-                    self.log_test("POST /api/status", False, f"Missing fields in response: {data}")
-            else:
-                self.log_test("POST /api/status", False, f"Status: {response.status_code}, Response: {response.text}")
-        except Exception as e:
-            self.log_test("POST /api/status", False, f"Error: {str(e)}")
-
-        # Test GET /api/status
-        try:
-            response = requests.get(f"{self.api_url}/status", timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                if isinstance(data, list):
-                    self.log_test("GET /api/status", True, f"Retrieved {len(data)} status checks")
-                else:
-                    self.log_test("GET /api/status", False, f"Expected list, got: {type(data)}")
-            else:
-                self.log_test("GET /api/status", False, f"Status: {response.status_code}, Response: {response.text}")
-        except Exception as e:
-            self.log_test("GET /api/status", False, f"Error: {str(e)}")
-
-    def test_authentication_endpoints(self):
-        """Test authentication endpoints (expected to be missing)"""
-        # Test POST /auth/register
-        merchant_data = {
-            "email": "merchant@test.com",
-            "password": "Test123!",
-            "firstName": "John",
-            "lastName": "Doe",
-            "role": "MERCHANT",
-            "businessName": "Test Rentals",
-            "businessAddress": "123 Main St"
+    def test_authentication_system(self):
+        """Test complete authentication flow"""
+        print("\n=== AUTHENTICATION SYSTEM TESTS ===")
+        
+        # Test renter registration
+        response = self.make_request("POST", "/auth/register", self.renter_data)
+        success = response and response.status_code in [200, 201]
+        self.log_test("Renter Registration", success, 
+                     f"Status: {response.status_code if response else 'No response'}")
+        
+        if success and response:
+            try:
+                renter_result = response.json()
+                if 'id' in renter_result:
+                    self.user_ids['renter'] = renter_result['id']
+            except:
+                pass
+        
+        # Test merchant registration
+        response = self.make_request("POST", "/auth/register", self.merchant_data)
+        success = response and response.status_code in [200, 201]
+        self.log_test("Merchant Registration", success, 
+                     f"Status: {response.status_code if response else 'No response'}")
+        
+        if success and response:
+            try:
+                merchant_result = response.json()
+                if 'id' in merchant_result:
+                    self.user_ids['merchant'] = merchant_result['id']
+                    self.merchant_ids.append(merchant_result['id'])
+            except:
+                pass
+        
+        # Test renter login
+        login_data = {
+            "email": self.renter_data["email"],
+            "password": self.renter_data["password"]
         }
+        response = self.make_request("POST", "/auth/login", login_data)
+        success = response and response.status_code == 200
+        self.log_test("Renter Login", success, 
+                     f"Status: {response.status_code if response else 'No response'}")
         
-        try:
-            response = requests.post(f"{self.api_url}/auth/register", json=merchant_data, timeout=10)
-            if response.status_code == 200:
-                self.log_test("POST /auth/register (Merchant)", True, "Merchant registration successful")
-            else:
-                self.log_test("POST /auth/register (Merchant)", False, 
-                            f"Status: {response.status_code}, Response: {response.text}")
-        except Exception as e:
-            self.log_test("POST /auth/register (Merchant)", False, f"Endpoint not implemented: {str(e)}")
-
-        # Test POST /auth/login
-        login_data = {"email": "merchant@test.com", "password": "Test123!"}
-        try:
-            response = requests.post(f"{self.api_url}/auth/login", json=login_data, timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                if "access_token" in data:
-                    self.merchant_token = data["access_token"]
-                    self.log_test("POST /auth/login", True, "Login successful, token received")
-                else:
-                    self.log_test("POST /auth/login", False, f"No access_token in response: {data}")
-            else:
-                self.log_test("POST /auth/login", False, f"Status: {response.status_code}, Response: {response.text}")
-        except Exception as e:
-            self.log_test("POST /auth/login", False, f"Endpoint not implemented: {str(e)}")
-
-    def test_vehicle_endpoints(self):
-        """Test vehicle management endpoints (expected to be missing)"""
-        if not self.merchant_token:
-            self.log_test("Vehicle Endpoints", False, "No merchant token available - skipping vehicle tests")
-            return
-
-        headers = {"Authorization": f"Bearer {self.merchant_token}"}
+        if success and response:
+            try:
+                login_result = response.json()
+                if 'access_token' in login_result:
+                    self.tokens['renter'] = login_result['access_token']
+            except:
+                pass
         
-        # Test POST /vehicles
+        # Test merchant login
+        merchant_login_data = {
+            "email": self.merchant_data["email"],
+            "password": self.merchant_data["password"]
+        }
+        response = self.make_request("POST", "/auth/login", merchant_login_data)
+        success = response and response.status_code == 200
+        self.log_test("Merchant Login", success, 
+                     f"Status: {response.status_code if response else 'No response'}")
+        
+        if success and response:
+            try:
+                login_result = response.json()
+                if 'access_token' in login_result:
+                    self.tokens['merchant'] = login_result['access_token']
+            except:
+                pass
+        
+        # Test profile access with renter token
+        if 'renter' in self.tokens:
+            response = self.make_request("GET", "/auth/profile", token=self.tokens['renter'])
+            success = response and response.status_code == 200
+            self.log_test("Renter Profile Access", success, 
+                         f"Status: {response.status_code if response else 'No response'}")
+        else:
+            self.log_test("Renter Profile Access", False, "No renter token available")
+        
+        return len(self.tokens) >= 2
+
+    def test_user_management(self):
+        """Test user management features"""
+        print("\n=== USER MANAGEMENT TESTS ===")
+        
+        # Test driving license upload for renter
+        if 'renter' in self.tokens:
+            license_data = {
+                "image": self.sample_image
+            }
+            response = self.make_request("POST", "/users/upload-license", 
+                                       license_data, token=self.tokens['renter'])
+            success = response and response.status_code in [200, 201]
+            self.log_test("Driving License Upload", success, 
+                         f"Status: {response.status_code if response else 'No response'}")
+        else:
+            self.log_test("Driving License Upload", False, "No renter token available")
+
+    def test_vehicle_management(self):
+        """Test vehicle management system"""
+        print("\n=== VEHICLE MANAGEMENT TESTS ===")
+        
+        if 'merchant' not in self.tokens:
+            self.log_test("Vehicle Management", False, "No merchant token available")
+            return False
+        
+        # Create a vehicle
         vehicle_data = {
-            "make": "Toyota",
-            "model": "Camry",
-            "year": 2022,
-            "color": "Black",
-            "licensePlate": "ABC123",
-            "pricePerHour": 10,
-            "pricePerDay": 75,
+            "make": "Honda",
+            "model": "Civic",
+            "year": 2023,
+            "color": "Blue",
+            "licensePlate": "XYZ789",
+            "pricePerHour": 15,
+            "pricePerDay": 100,
             "seats": 5,
             "fuelType": "Petrol",
-            "transmission": "Automatic",
-            "location": "Downtown",
-            "description": "Great car",
-            "features": ["AC", "GPS"],
-            "images": ["data:image/jpeg;base64,test"]
+            "transmission": "Manual",
+            "description": "Reliable car",
+            "features": ["AC", "Bluetooth"],
+            "images": [self.sample_image]
         }
         
-        try:
-            response = requests.post(f"{self.api_url}/vehicles", json=vehicle_data, headers=headers, timeout=10)
-            if response.status_code == 201:
-                data = response.json()
-                if "id" in data:
-                    self.vehicle_id = data["id"]
-                    self.log_test("POST /vehicles", True, f"Vehicle created with ID: {self.vehicle_id}")
-                else:
-                    self.log_test("POST /vehicles", False, f"No ID in response: {data}")
-            else:
-                self.log_test("POST /vehicles", False, f"Status: {response.status_code}, Response: {response.text}")
-        except Exception as e:
-            self.log_test("POST /vehicles", False, f"Endpoint not implemented: {str(e)}")
-
-        # Test GET /vehicles
-        try:
-            response = requests.get(f"{self.api_url}/vehicles", timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                if isinstance(data, list):
-                    self.log_test("GET /vehicles", True, f"Retrieved {len(data)} vehicles")
-                else:
-                    self.log_test("GET /vehicles", False, f"Expected list, got: {type(data)}")
-            else:
-                self.log_test("GET /vehicles", False, f"Status: {response.status_code}, Response: {response.text}")
-        except Exception as e:
-            self.log_test("GET /vehicles", False, f"Endpoint not implemented: {str(e)}")
-
-    def test_booking_endpoints(self):
-        """Test booking endpoints (expected to be missing)"""
-        if not self.renter_token or not self.vehicle_id:
-            self.log_test("Booking Endpoints", False, "No renter token or vehicle ID - skipping booking tests")
-            return
-
-        headers = {"Authorization": f"Bearer {self.renter_token}"}
+        response = self.make_request("POST", "/vehicles", vehicle_data, 
+                                   token=self.tokens['merchant'])
+        success = response and response.status_code in [200, 201]
+        self.log_test("Vehicle Creation", success, 
+                     f"Status: {response.status_code if response else 'No response'}")
         
-        # Test POST /bookings
+        if success and response:
+            try:
+                vehicle_result = response.json()
+                if 'id' in vehicle_result:
+                    self.vehicle_ids.append(vehicle_result['id'])
+            except:
+                pass
+        
+        # Test get all vehicles
+        response = self.make_request("GET", "/vehicles")
+        success = response and response.status_code == 200
+        self.log_test("Get All Vehicles", success, 
+                     f"Status: {response.status_code if response else 'No response'}")
+        
+        # Test get merchant's vehicles
+        response = self.make_request("GET", "/vehicles/my", token=self.tokens['merchant'])
+        success = response and response.status_code == 200
+        self.log_test("Get Merchant Vehicles", success, 
+                     f"Status: {response.status_code if response else 'No response'}")
+        
+        # Test get specific vehicle
+        if self.vehicle_ids:
+            vehicle_id = self.vehicle_ids[0]
+            response = self.make_request("GET", f"/vehicles/{vehicle_id}")
+            success = response and response.status_code == 200
+            self.log_test("Get Specific Vehicle", success, 
+                         f"Status: {response.status_code if response else 'No response'}")
+        else:
+            self.log_test("Get Specific Vehicle", False, "No vehicle ID available")
+        
+        return len(self.vehicle_ids) > 0
+
+    def test_booking_system(self):
+        """Test booking management system"""
+        print("\n=== BOOKING SYSTEM TESTS ===")
+        
+        if 'renter' not in self.tokens or not self.vehicle_ids:
+            self.log_test("Booking System", False, "Missing renter token or vehicle ID")
+            return False
+        
+        # Create booking request
+        start_date = (datetime.now() + timedelta(days=1)).isoformat()
+        end_date = (datetime.now() + timedelta(days=3)).isoformat()
+        
         booking_data = {
-            "vehicleId": self.vehicle_id,
-            "startDate": (datetime.now() + timedelta(days=1)).isoformat(),
-            "endDate": (datetime.now() + timedelta(days=3)).isoformat()
+            "vehicleId": self.vehicle_ids[0],
+            "startDate": start_date,
+            "endDate": end_date,
+            "renterNotes": "Need for trip"
         }
         
-        try:
-            response = requests.post(f"{self.api_url}/bookings", json=booking_data, headers=headers, timeout=10)
-            if response.status_code == 201:
-                data = response.json()
-                if "id" in data:
-                    self.booking_id = data["id"]
-                    self.log_test("POST /bookings", True, f"Booking created with ID: {self.booking_id}")
+        response = self.make_request("POST", "/bookings", booking_data, 
+                                   token=self.tokens['renter'])
+        success = response and response.status_code in [200, 201]
+        self.log_test("Create Booking Request", success, 
+                     f"Status: {response.status_code if response else 'No response'}")
+        
+        if success and response:
+            try:
+                booking_result = response.json()
+                if 'id' in booking_result:
+                    self.booking_ids.append(booking_result['id'])
+            except:
+                pass
+        
+        # Test get renter bookings
+        response = self.make_request("GET", "/bookings/renter", token=self.tokens['renter'])
+        success = response and response.status_code == 200
+        self.log_test("Get Renter Bookings", success, 
+                     f"Status: {response.status_code if response else 'No response'}")
+        
+        # Test get merchant bookings
+        response = self.make_request("GET", "/bookings/merchant", token=self.tokens['merchant'])
+        success = response and response.status_code == 200
+        self.log_test("Get Merchant Bookings", success, 
+                     f"Status: {response.status_code if response else 'No response'}")
+        
+        # Test accept booking
+        if self.booking_ids:
+            booking_id = self.booking_ids[0]
+            response = self.make_request("PATCH", f"/bookings/{booking_id}/accept", 
+                                       {}, token=self.tokens['merchant'])
+            success = response and response.status_code == 200
+            self.log_test("Accept Booking", success, 
+                         f"Status: {response.status_code if response else 'No response'}")
+        else:
+            self.log_test("Accept Booking", False, "No booking ID available")
+        
+        return len(self.booking_ids) > 0
+
+    def test_messaging_system(self):
+        """Test messaging system"""
+        print("\n=== MESSAGING SYSTEM TESTS ===")
+        
+        if not self.booking_ids or 'renter' not in self.tokens or 'merchant' not in self.tokens:
+            self.log_test("Messaging System", False, "Missing booking ID or tokens")
+            return False
+        
+        booking_id = self.booking_ids[0]
+        
+        # Renter sends message
+        message_data = {
+            "content": "What time can I pick up?"
+        }
+        response = self.make_request("POST", f"/messages/{booking_id}", 
+                                   message_data, token=self.tokens['renter'])
+        success = response and response.status_code in [200, 201]
+        self.log_test("Renter Send Message", success, 
+                     f"Status: {response.status_code if response else 'No response'}")
+        
+        # Merchant sends message
+        merchant_message_data = {
+            "content": "9am tomorrow works"
+        }
+        response = self.make_request("POST", f"/messages/{booking_id}", 
+                                   merchant_message_data, token=self.tokens['merchant'])
+        success = response and response.status_code in [200, 201]
+        self.log_test("Merchant Send Message", success, 
+                     f"Status: {response.status_code if response else 'No response'}")
+        
+        # Get messages
+        response = self.make_request("GET", f"/messages/{booking_id}", 
+                                   token=self.tokens['renter'])
+        success = response and response.status_code == 200
+        self.log_test("Get Messages", success, 
+                     f"Status: {response.status_code if response else 'No response'}")
+        
+        if success and response:
+            try:
+                messages = response.json()
+                if isinstance(messages, list) and len(messages) >= 2:
+                    self.log_test("Message Count Verification", True, f"Found {len(messages)} messages")
                 else:
-                    self.log_test("POST /bookings", False, f"No ID in response: {data}")
-            else:
-                self.log_test("POST /bookings", False, f"Status: {response.status_code}, Response: {response.text}")
-        except Exception as e:
-            self.log_test("POST /bookings", False, f"Endpoint not implemented: {str(e)}")
+                    self.log_test("Message Count Verification", False, f"Expected 2+ messages, got {len(messages) if isinstance(messages, list) else 'invalid response'}")
+            except:
+                self.log_test("Message Count Verification", False, "Could not parse messages response")
 
-    def test_messaging_endpoints(self):
-        """Test messaging endpoints (expected to be missing)"""
-        if not self.booking_id:
-            self.log_test("Messaging Endpoints", False, "No booking ID - skipping messaging tests")
-            return
-
-        # Test POST /messages/{bookingId}
-        message_data = {"content": "When can I pick up?"}
+    def test_review_system(self):
+        """Test review system"""
+        print("\n=== REVIEW SYSTEM TESTS ===")
         
-        try:
-            response = requests.post(f"{self.api_url}/messages/{self.booking_id}", 
-                                   json=message_data, timeout=10)
-            if response.status_code == 201:
-                self.log_test("POST /messages/{bookingId}", True, "Message sent successfully")
-            else:
-                self.log_test("POST /messages/{bookingId}", False, 
-                            f"Status: {response.status_code}, Response: {response.text}")
-        except Exception as e:
-            self.log_test("POST /messages/{bookingId}", False, f"Endpoint not implemented: {str(e)}")
-
-    def test_review_endpoints(self):
-        """Test review endpoints (expected to be missing)"""
-        if not self.booking_id:
-            self.log_test("Review Endpoints", False, "No booking ID - skipping review tests")
-            return
-
-        # Test POST /reviews
+        if not self.booking_ids or 'merchant' not in self.tokens or 'renter' not in self.tokens:
+            self.log_test("Review System", False, "Missing booking ID or tokens")
+            return False
+        
+        booking_id = self.booking_ids[0]
+        
+        # Complete booking first
+        response = self.make_request("PATCH", f"/bookings/{booking_id}/complete", 
+                                   {}, token=self.tokens['merchant'])
+        success = response and response.status_code == 200
+        self.log_test("Complete Booking", success, 
+                     f"Status: {response.status_code if response else 'No response'}")
+        
+        # Create review
         review_data = {
-            "bookingId": self.booking_id,
+            "bookingId": booking_id,
             "rating": 5,
-            "comment": "Great experience!"
+            "comment": "Excellent service!"
         }
+        response = self.make_request("POST", "/reviews", review_data, 
+                                   token=self.tokens['renter'])
+        success = response and response.status_code in [200, 201]
+        self.log_test("Create Review", success, 
+                     f"Status: {response.status_code if response else 'No response'}")
         
-        try:
-            response = requests.post(f"{self.api_url}/reviews", json=review_data, timeout=10)
-            if response.status_code == 201:
-                self.log_test("POST /reviews", True, "Review created successfully")
-            else:
-                self.log_test("POST /reviews", False, f"Status: {response.status_code}, Response: {response.text}")
-        except Exception as e:
-            self.log_test("POST /reviews", False, f"Endpoint not implemented: {str(e)}")
+        # Get merchant reviews
+        if self.merchant_ids:
+            merchant_id = self.merchant_ids[0]
+            response = self.make_request("GET", f"/reviews/merchant/{merchant_id}")
+            success = response and response.status_code == 200
+            self.log_test("Get Merchant Reviews", success, 
+                         f"Status: {response.status_code if response else 'No response'}")
+        else:
+            self.log_test("Get Merchant Reviews", False, "No merchant ID available")
 
-    def test_port_4000_connectivity(self):
-        """Test if anything is running on port 4000 as mentioned in the review request"""
-        try:
-            response = requests.get("http://localhost:4000/api/", timeout=5)
-            if response.status_code == 200:
-                self.log_test("Port 4000 Connectivity", True, "Service responding on port 4000")
-            else:
-                self.log_test("Port 4000 Connectivity", False, f"Status: {response.status_code}")
-        except Exception as e:
-            self.log_test("Port 4000 Connectivity", False, f"No service on port 4000: {str(e)}")
+    def test_error_cases(self):
+        """Test error handling and edge cases"""
+        print("\n=== ERROR HANDLING TESTS ===")
+        
+        # Test unauthorized access
+        response = self.make_request("GET", "/auth/profile")
+        success = response and response.status_code == 401
+        self.log_test("Unauthorized Access (401)", success, 
+                     f"Status: {response.status_code if response else 'No response'}")
+        
+        # Test wrong role access (renter trying to create vehicle)
+        if 'renter' in self.tokens:
+            vehicle_data = {
+                "make": "Toyota",
+                "model": "Camry",
+                "year": 2022,
+                "licensePlate": "ABC123"
+            }
+            response = self.make_request("POST", "/vehicles", vehicle_data, 
+                                       token=self.tokens['renter'])
+            success = response and response.status_code == 403
+            self.log_test("Wrong Role Access (403)", success, 
+                         f"Status: {response.status_code if response else 'No response'}")
+        else:
+            self.log_test("Wrong Role Access (403)", False, "No renter token available")
+        
+        # Test invalid data (missing required fields)
+        response = self.make_request("POST", "/auth/register", {"email": "invalid"})
+        success = response and response.status_code == 400
+        self.log_test("Invalid Data (400)", success, 
+                     f"Status: {response.status_code if response else 'No response'}")
+
+    def test_pagination_and_filtering(self):
+        """Test pagination and filtering on vehicles endpoint"""
+        print("\n=== PAGINATION & FILTERING TESTS ===")
+        
+        # Test vehicles with pagination
+        response = self.make_request("GET", "/vehicles?page=1&limit=10")
+        success = response and response.status_code == 200
+        self.log_test("Vehicles Pagination", success, 
+                     f"Status: {response.status_code if response else 'No response'}")
+        
+        # Test vehicles with filtering
+        response = self.make_request("GET", "/vehicles?make=Honda")
+        success = response and response.status_code == 200
+        self.log_test("Vehicles Filtering", success, 
+                     f"Status: {response.status_code if response else 'No response'}")
 
     def run_all_tests(self):
-        """Run all tests"""
-        print("=" * 80)
-        print("RENT MY VROOM BACKEND API TESTING")
-        print("=" * 80)
-        print()
+        """Run complete test suite"""
+        print("🚀 Starting Rent My Vroom Backend API Tests")
+        print("=" * 60)
         
-        # Test basic connectivity first
-        self.test_basic_connectivity()
+        # Track overall results
+        test_results = {}
         
-        # Test port 4000 as mentioned in review request
-        self.test_port_4000_connectivity()
-        
-        # Test implemented endpoints
-        self.test_status_endpoints()
-        
-        # Test expected but missing endpoints
-        self.test_authentication_endpoints()
-        self.test_vehicle_endpoints()
-        self.test_booking_endpoints()
-        self.test_messaging_endpoints()
-        self.test_review_endpoints()
+        # Run all test categories
+        test_results['connectivity'] = self.test_basic_connectivity()
+        test_results['authentication'] = self.test_authentication_system()
+        test_results['user_management'] = self.test_user_management()
+        test_results['vehicle_management'] = self.test_vehicle_management()
+        test_results['booking_system'] = self.test_booking_system()
+        test_results['messaging'] = self.test_messaging_system()
+        test_results['reviews'] = self.test_review_system()
+        test_results['error_handling'] = self.test_error_cases()
+        test_results['pagination'] = self.test_pagination_and_filtering()
         
         # Print summary
-        self.print_summary()
-
-    def print_summary(self):
-        """Print test summary"""
-        print("=" * 80)
-        print("TEST SUMMARY")
-        print("=" * 80)
+        print("\n" + "=" * 60)
+        print("🏁 TEST SUMMARY")
+        print("=" * 60)
         
-        passed = sum(1 for result in self.test_results if result["success"])
-        failed = len(self.test_results) - passed
+        passed = sum(1 for result in test_results.values() if result)
+        total = len(test_results)
         
-        print(f"Total Tests: {len(self.test_results)}")
-        print(f"Passed: {passed}")
-        print(f"Failed: {failed}")
-        print()
+        for category, result in test_results.items():
+            status = "✅ PASS" if result else "❌ FAIL"
+            print(f"{status} {category.replace('_', ' ').title()}")
         
-        print("DETAILED RESULTS:")
-        print("-" * 40)
+        print(f"\nOverall: {passed}/{total} test categories passed")
         
-        # Group results
-        implemented = []
-        missing = []
+        if passed == total:
+            print("🎉 All tests passed! Backend API is fully functional.")
+        else:
+            print("⚠️  Some tests failed. Check individual test results above.")
         
-        for result in self.test_results:
-            if result["success"]:
-                implemented.append(result)
-            else:
-                if "not implemented" in result["details"] or "Connection refused" in result["details"]:
-                    missing.append(result)
-                else:
-                    # These are actual failures of implemented endpoints
-                    print(f"❌ CRITICAL ISSUE: {result['test']}")
-                    print(f"   {result['details']}")
-                    print()
-        
-        if implemented:
-            print("✅ WORKING ENDPOINTS:")
-            for result in implemented:
-                print(f"   • {result['test']}")
-            print()
-        
-        if missing:
-            print("❌ MISSING ENDPOINTS:")
-            for result in missing:
-                print(f"   • {result['test']}")
-            print()
-        
-        print("ANALYSIS:")
-        print("-" * 40)
-        print("• Backend is running on port 8001, not port 4000 as expected in review request")
-        print("• Only basic status check endpoints are implemented")
-        print("• Complete Rent My Vroom functionality is missing:")
-        print("  - Authentication system (/auth/register, /auth/login, /auth/profile, /auth/refresh)")
-        print("  - Vehicle management (/vehicles)")
-        print("  - Booking system (/bookings)")
-        print("  - Messaging system (/messages)")
-        print("  - Review system (/reviews)")
-        print("  - User management (/users)")
-        print("• Models and auth utilities are defined but not used in routes")
-        print("• Frontend is configured to use port 4000 but backend runs on 8001")
-
+        return test_results
 
 if __name__ == "__main__":
-    # Test both ports
-    print("Testing backend on port 8001 (actual running port)...")
-    tester = RentMyVroomTester("http://localhost:8001")
-    tester.run_all_tests()
+    tester = RentMyVroomAPITester()
+    results = tester.run_all_tests()
